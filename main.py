@@ -6,25 +6,62 @@ import os
 import sys
 import argparse
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+
 def parse_args():
-    p = argparse.ArgumentParser(description="Webcam object detector (YOLO)")
+    # baca env var dengan fallback yang aman (hindari None / empty)
+    env_src = os.getenv("CAMERA_SOURCE")
+    default_src = env_src if env_src and env_src.strip().lower() not in ("none", "") else "0"
+
+    p = argparse.ArgumentParser(description="Webcam / RTSP object detector (YOLO)")
     p.add_argument("--model", default="yolo11n.pt", help="path to model weights")
-    p.add_argument("--source", default="1", help="camera index or video file")
+    p.add_argument(
+        "--source",
+        default=default_src,
+        help="camera index, video file or RTSP URL (prefer set via CAMERA_SOURCE env var)",
+    )
     p.add_argument("--imgsz", type=int, default=640, help="inference image size (px)")
     p.add_argument("--conf", type=float, default=0.25, help="confidence threshold")
     p.add_argument("--device", default="cpu", help="device (cpu or cuda)")
     return p.parse_args()
 
-def open_camera(source):
+def open_camera(source, retries=3, wait_s=2):
+    """Open local camera, file or RTSP. For RTSP prefer FFMPEG backend on Windows."""
+    # try numeric index first
     try:
         idx = int(source)
-        cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)  # use DirectShow on Windows
+        return cv2.VideoCapture(idx, cv2.CAP_DSHOW)
     except Exception:
-        cap = cv2.VideoCapture(source)
-    return cap
+        pass
+
+    # RTSP or remote stream: prefer FFMPEG backend (better RTSP support)
+    api = cv2.CAP_FFMPEG if str(source).lower().startswith("rtsp://") else 0
+
+    for attempt in range(1, retries + 1):
+        cap = cv2.VideoCapture(source, api)
+        # optional: reduce internal buffer (if supported)
+        try:
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        except Exception:
+            pass
+        if cap.isOpened():
+            return cap
+        cap.release()
+        time.sleep(wait_s)
+    return cap  # will be returned possibly closed if failed
 
 def main():
     args = parse_args()
+
+    # extra safety: normalize empty/"None" values to webcam 0
+    if not args.source or str(args.source).strip().lower() in ("none", ""):
+        args.source = "0"
+
+    print(f"Using video source: {args.source}")
 
     if not os.path.exists(args.model):
         print(f"Model not found: {args.model}")
