@@ -9,7 +9,7 @@ import argparse
 def parse_args():
     p = argparse.ArgumentParser(description="Webcam object detector (YOLO)")
     p.add_argument("--model", default="yolo11n.pt", help="path to model weights")
-    p.add_argument("--source", default="1", help="camera index or video file")
+    p.add_argument("--source", default="0", help="camera index or video file")
     p.add_argument("--imgsz", type=int, default=640, help="inference image size (px)")
     p.add_argument("--conf", type=float, default=0.25, help="confidence threshold")
     p.add_argument("--device", default="cpu", help="device (cpu or cuda)")
@@ -70,7 +70,7 @@ def main():
 
             cv2.imshow("YOLO - press q to quit", frame_out)
 
-            key = cv2.waitKey(1) & 0xFF
+            key = cv2.waitKey(15) & 0xFF
             if key == ord('s'):
                 output_dir = "captures"
                 os.makedirs(output_dir, exist_ok=True)
